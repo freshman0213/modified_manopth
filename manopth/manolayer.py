@@ -141,6 +141,7 @@ class ManoLayer(Module):
                 th_pose_coeffs[:, :self.rot],
                 self.th_hands_mean + th_full_hand_pose
             ], 1)
+            print(f'th_full_pose : {th_full_pose}')
             if self.root_rot_mode == 'axisang':
                 # compute rotation matrixes from axis-angle while skipping global rotation
                 th_pose_map, th_rot_map = th_posemap_axisang(th_full_pose)
