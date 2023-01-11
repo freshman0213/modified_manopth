@@ -3,6 +3,8 @@ import os
 import numpy as np
 import torch
 from torch.nn import Module
+import datetime
+from copy import deepcopy
 
 from mano.webuser.smpl_handpca_wrapper_HAND_only import ready_arguments
 from manopth import rodrigues_layer, rotproj, rot6d
@@ -22,6 +24,7 @@ class ManoLayer(Module):
                  ncomps=6,
                  side='right',
                  mano_root='mano/models',
+                 th_full_pose_root=None,
                  use_pca=True,
                  root_rot_mode='axisang',
                  joint_rot_mode='axisang',
@@ -61,6 +64,12 @@ class ManoLayer(Module):
             self.mano_path = os.path.join(mano_root, 'MANO_RIGHT.pkl')
         elif side == 'left':
             self.mano_path = os.path.join(mano_root, 'MANO_LEFT.pkl')
+        
+        if th_full_pose_root is not None:
+            e = datetime.datetime.now()
+            self.th_full_pose_path = os.path.join(th_full_pose_root, e.strftime("%Y%m%d_%H%M%S") + '.npy')
+        else:
+            self.th_full_pose_path = None
 
         smpl_data = ready_arguments(self.mano_path)
 
@@ -69,21 +78,21 @@ class ManoLayer(Module):
         self.smpl_data = smpl_data
 
         self.register_buffer('th_betas',
-                             torch.Tensor(smpl_data['betas'].r).unsqueeze(0))
+                             torch.Tensor(deepcopy(smpl_data['betas'].r)).unsqueeze(0))
         self.register_buffer('th_shapedirs',
-                             torch.Tensor(smpl_data['shapedirs'].r))
+                             torch.Tensor(deepcopy(smpl_data['shapedirs'].r)))
         self.register_buffer('th_posedirs',
-                             torch.Tensor(smpl_data['posedirs'].r))
+                             torch.Tensor(deepcopy(smpl_data['posedirs'].r)))
         self.register_buffer(
             'th_v_template',
-            torch.Tensor(smpl_data['v_template'].r).unsqueeze(0))
+            torch.Tensor(deepcopy(smpl_data['v_template'].r)).unsqueeze(0))
         self.register_buffer(
             'th_J_regressor',
-            torch.Tensor(np.array(smpl_data['J_regressor'].toarray())))
+            torch.Tensor(np.array(deepcopy(smpl_data['J_regressor'].toarray()))))
         self.register_buffer('th_weights',
-                             torch.Tensor(smpl_data['weights'].r))
+                             torch.Tensor(deepcopy(smpl_data['weights'].r)))
         self.register_buffer('th_faces',
-                             torch.Tensor(smpl_data['f'].astype(np.int32)).long())
+                             torch.Tensor(deepcopy(smpl_data['f'].astype(np.int32))).long())
 
         # Get hand mean
         hands_mean = np.zeros(hands_components.shape[1]
@@ -141,7 +150,9 @@ class ManoLayer(Module):
                 th_pose_coeffs[:, :self.rot],
                 self.th_hands_mean + th_full_hand_pose
             ], 1)
-            print(f'th_full_pose : {th_full_pose}')
+            if self.th_full_pose_path is not None:
+                np.save(self.th_full_pose_path, th_full_pose.detach().cpu().numpy())
+                print(f'th_full_pose is saved to {self.th_full_pose_path}')
             if self.root_rot_mode == 'axisang':
                 # compute rotation matrixes from axis-angle while skipping global rotation
                 th_pose_map, th_rot_map = th_posemap_axisang(th_full_pose)
